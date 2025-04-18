@@ -101,7 +101,7 @@ func (store *Store) TransferTx(ctx context.Context, arg TransferTxParams) (Trans
 
 		// TODO: Update accounts' balance - needs locking mechanisms
 		// Get account from database -> Update its balance ... proper locking mechanism is required
-		account1, err := q.GetAccount(ctx, arg.FromAccountID)
+		account1, err := q.GetAccountForUpdate(ctx, arg.FromAccountID)
 		if err != nil {
 			return err
 		}
@@ -115,7 +115,7 @@ func (store *Store) TransferTx(ctx context.Context, arg TransferTxParams) (Trans
 		}
 
 		// Move money into account 2
-		account2, err := q.GetAccount(ctx, arg.ToAccountID)
+		account2, err := q.GetAccountForUpdate(ctx, arg.ToAccountID)
 		if err != nil {
 			return err
 		}
