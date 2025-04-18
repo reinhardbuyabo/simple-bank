@@ -65,6 +65,14 @@ type TransferTxResult struct {
 	ToEntry     Entry    `json:"to_entry"`     // the entry record for the account to which money is transferred
 }
 
+// Context. WihtValue returns a copy of parent in which the value associated with key is val
+// Use context values only for request-scoped data that transist processed and APIs, not for passing optional parameters to functions
+// The provided key must  be comparable and should not be of type string or any other built-in type to avoid collisions between packages using context.
+// Users of WithValue should define their own types for keys
+// To avoid allocating when assigning to an interface{}, context keys often have concrete type struct{}
+// Alternatively, exported key variables' static type should be apointer or interface
+var txKey = struct{}{} // 2nd bracket means we'r creating a new empty obj of that type
+
 // TransferTx performs a money transfer from 1 account to the otehr
 // it creates a transfer record, add account entries, and update accounts' balance within a single tx
 func (store *Store) TransferTx(ctx context.Context, arg TransferTxParams) (TransferTxResult, error) {
@@ -73,6 +81,9 @@ func (store *Store) TransferTx(ctx context.Context, arg TransferTxParams) (Trans
 	err := store.execTx(ctx, func(q *Queries) error {
 		var err error
 
+		txName := ctx.Value(txKey) // get the transaction name from the context
+
+		fmt.Println(txName, "create transfer")
 		result.Transfer, err = q.CreateTransfer(ctx, CreateTransferParams{
 			FromAccountID: arg.FromAccountID,
 			ToAccountID:   arg.ToAccountID,
@@ -83,6 +94,7 @@ func (store *Store) TransferTx(ctx context.Context, arg TransferTxParams) (Trans
 			return err
 		}
 
+		fmt.Println(txName, "create entry 1")
 		result.FromEntry, err = q.CreateEntry(ctx, CreateEntryParams{
 			AccountID: arg.FromAccountID,
 			Amount:    -arg.Amount, // money is moving out
@@ -91,6 +103,7 @@ func (store *Store) TransferTx(ctx context.Context, arg TransferTxParams) (Trans
 			return err
 		}
 
+		fmt.Println(txName, "create entry 2")
 		result.ToEntry, err = q.CreateEntry(ctx, CreateEntryParams{
 			AccountID: arg.ToAccountID,
 			Amount:    arg.Amount, // money is moving in
@@ -101,28 +114,20 @@ func (store *Store) TransferTx(ctx context.Context, arg TransferTxParams) (Trans
 
 		// TODO: Update accounts' balance - needs locking mechanisms
 		// Get account from database -> Update its balance ... proper locking mechanism is required
-		account1, err := q.GetAccountForUpdate(ctx, arg.FromAccountID)
-		if err != nil {
-			return err
-		}
-
-		result.FromAccount, err = q.UpdateAccount(ctx, UpdateAccountParams{
-			ID:      account1.ID,
-			Balance: account1.Balance - arg.Amount, // money is moving out
+		fmt.Println(txName, "Update account 1's balance")
+		result.FromAccount, err = q.AddAccountBalance(ctx, AddAccountBalanceParams{
+			ID:     arg.FromAccountID,
+			Amount: -arg.Amount, // money is moving out
 		})
 		if err != nil {
 			return err
 		}
 
 		// Move money into account 2
-		account2, err := q.GetAccountForUpdate(ctx, arg.ToAccountID)
-		if err != nil {
-			return err
-		}
-
-		result.ToAccount, err = q.UpdateAccount(ctx, UpdateAccountParams{
-			ID:      account2.ID,
-			Balance: account2.Balance + arg.Amount, // money is moving in
+		fmt.Println(txName, "Update account 2's balance")
+		result.ToAccount, err = q.AddAccountBalance(ctx, AddAccountBalanceParams{
+			ID:     arg.ToAccountID,
+			Amount: arg.Amount, // money is moving in
 		})
 		if err != nil {
 			return err

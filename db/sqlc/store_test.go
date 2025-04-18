@@ -18,7 +18,7 @@ func TestTransferTx(t *testing.T) {
 	fmt.Println(">> before[from:to]", account1.Balance, account2.Balance)
 
 	// run n concurrent transfer transactions to make sure the transfer transactions work well
-	n := 5
+	n := 5              // to make it easier to debug, we should not run too many concurrent transactions
 	amount := int64(10) // amount to transfer
 
 	errs := make(chan error) // channel to receive errors from the go-routines
@@ -27,11 +27,19 @@ func TestTransferTx(t *testing.T) {
 
 	// run n concurrent transfer transactions
 	for i := 0; i < n; i++ {
+		// In order to figure out why deadlocks occurred, we need to print some logs to see which transaction is calling which query, and which order
+		// We have to assign a name for each transaction and pass it into the TransferTx function, via the context argument.
+		txName := fmt.Sprintf("tx %d,", i+1)
+
 		// different go-routine ,,, send back to main go-routine, using channels since they're used to connect go routines
 		go func() {
 			// calling the Transaction function
+
+			// Instead of passing the background context, we will pass in the new context with the transaction name
+			ctx := context.WithValue(context.Background(), txKey, txName) // after this the context in TransferTx will hold the tx name
+
 			// it will create a new transaction and execute the transfer transaction
-			result, err := store.TransferTx(context.Background(), TransferTxParams{
+			result, err := store.TransferTx(ctx, TransferTxParams{
 				FromAccountID: account1.ID,
 				ToAccountID:   account2.ID,
 				Amount:        amount,

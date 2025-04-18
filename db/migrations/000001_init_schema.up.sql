@@ -8,18 +8,23 @@ CREATE TABLE accounts (
 
 CREATE TABLE entries (
     id BIGSERIAL PRIMARY KEY,
-    account_id BIGINT NOT NULL REFERENCES accounts(id),
+    account_id BIGINT NOT NULL,
     amount BIGINT NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
 CREATE TABLE transfers (
     id BIGSERIAL PRIMARY KEY,
-    from_account_id BIGINT NOT NULL REFERENCES accounts(id),
-    to_account_id BIGINT NOT NULL REFERENCES accounts(id),
+    from_account_id BIGINT NOT NULL,
+    to_account_id BIGINT NOT NULL,
     amount BIGINT NOT NULL CHECK (amount > 0),
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- Deadlocks are caused by foreign key constraints
+ALTER TABLE "entries" ADD FOREIGN KEY ("account_id") REFERENCES "accounts" ("id");
+ALTER TABLE "transfers" ADD FOREIGN KEY ("from_account_id") REFERENCES "accounts" ("id");
+ALTER TABLE "transfers" ADD FOREIGN KEY ("to_account_id") REFERENCES "accounts" ("id");
 
 CREATE INDEX idx_entries_account_id ON entries(account_id);
 CREATE INDEX idx_transfers_from_account_id ON transfers(from_account_id);
