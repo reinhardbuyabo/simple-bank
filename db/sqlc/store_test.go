@@ -2,6 +2,7 @@ package db
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -12,6 +13,9 @@ func TestTransferTx(t *testing.T) {
 
 	account1 := createRandomAccount(t) // create a random account for the transfer
 	account2 := createRandomAccount(t) // create another random account for the transfer
+
+	// print out balances before transactions
+	fmt.Println(">> before[from:to]", account1.Balance, account2.Balance)
 
 	// run n concurrent transfer transactions to make sure the transfer transactions work well
 	n := 5
@@ -39,6 +43,7 @@ func TestTransferTx(t *testing.T) {
 	}
 
 	// Check results and errors
+	existed := make(map[int]bool) // map to check if the transfer ID already exists
 	for i := 0; i < n; i++ {
 		err := <-errs
 		require.NoError(t, err) // check if there is no error
@@ -80,5 +85,46 @@ func TestTransferTx(t *testing.T) {
 
 		_, err = store.GetEntry(context.Background(), toEntry.ID)
 		require.NoError(t, err) // check if there is no error
+
+		// Check Accounts
+		fromAccount := result.FromAccount             // where money is going out
+		require.NotEmpty(t, fromAccount)              // check if the from account is not empty
+		require.Equal(t, account1.ID, fromAccount.ID) // check if the from account ID is correct
+
+		// Money In
+		toAccount := result.ToAccount
+		require.NotEmpty(t, toAccount)              // check if the to account is not empty
+		require.Equal(t, account2.ID, toAccount.ID) // check if the to account ID is correct
+
+		// Check account balance
+		// print balance after the transaction
+		fmt.Println(">> tx[from:to]:", fromAccount.Balance, toAccount.Balance)
+		difference1 := account1.Balance - fromAccount.Balance
+		difference2 := toAccount.Balance - account2.Balance
+		require.Equal(t, difference1, difference2)
+		require.True(t, difference1 > 0)         // check if the difference is greater than 0`
+		require.True(t, difference1%amount == 0) // difference should be a multiple of the amount // amount, 2 * amount, 3 * amount, ..., n * amount
+
+		// k
+		k := int(difference1 / amount) // compute k
+		// k must be int between and n, n is no. of executed txs, k must be unique for each tx
+		require.True(t, k >= 1 && k <= n)  // check if k is between 1 and n
+		require.NotContains(t, existed, k) // check if k is not in the existed map
+		existed[k] = true                  // add k to the existed map
 	}
+
+	// Check the final updated balance
+	updatedAccount1, err := testQueries.GetAccount(context.Background(), account1.ID) // get the updated account
+	require.NoError(t, err)                                                           // check if there is no error
+
+	// Updated account 2
+	updatedAccount2, err := testQueries.GetAccount(context.Background(), account2.ID) // get the updated account
+	require.NoError(t, err)                                                           // check if there is no error
+
+	// print out balances after transactions
+	fmt.Println(">> after:", updatedAccount1.Balance, updatedAccount2.Balance)
+
+	// test
+	require.Equal(t, account1.Balance-int64(n)*amount, updatedAccount1.Balance) // check if the updated account balance is correct
+	require.Equal(t, account2.Balance+int64(n)*amount, updatedAccount2.Balance) // check if the updated account balance is correct
 }
